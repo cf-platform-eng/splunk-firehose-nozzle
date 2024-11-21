@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"code.cloudfoundry.org/lager"
+	"code.cloudfoundry.org/lager/v3"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/eventwriter"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/utils"
 )

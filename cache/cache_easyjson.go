@@ -61,15 +61,15 @@ func parseCfAppEnv(in *jlexer.Lexer, out *App) {
 	} else {
 		in.Delim('{')
 		if !in.IsDelim('}') {
-			out.CfAppEnv = make(map[string]interface{})
+			out.CfAppLabels = make(map[string]*string)
 		} else {
-			out.CfAppEnv = nil
+			out.CfAppLabels = nil
 		}
 		for !in.IsDelim('}') {
 			key := string(in.String())
 			in.WantColon()
-			v1 := in.Interface()
-			(out.CfAppEnv)[key] = v1
+			v1 := in.String()
+			(out.CfAppLabels)[key] = &v1
 			in.WantComma()
 		}
 		in.Delim('}')
@@ -121,12 +121,12 @@ func easyjsonA591d1bcEncodeGithubComCloudfoundryCommunitySplunkFirehoseNozzleCac
 	}
 	first = false
 	out.RawString("\"CfAppEnv\":")
-	if in.CfAppEnv == nil {
+	if in.CfAppLabels == nil {
 		out.RawString(`null`)
 	} else {
 		out.RawByte('{')
 		v2First := true
-		for v2Name, v2Value := range in.CfAppEnv {
+		for v2Name, v2Value := range in.CfAppLabels {
 			if !v2First {
 				out.RawByte(',')
 			}

@@ -1,16 +1,15 @@
 package splunknozzle_test
 
 import (
+	"fmt"
 	"os"
 	"time"
 
-	"code.cloudfoundry.org/lager"
+	"code.cloudfoundry.org/lager/v3"
 
-	cfclient "github.com/cloudfoundry-community/go-cfclient"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/monitoring"
 	. "github.com/cloudfoundry-community/splunk-firehose-nozzle/splunknozzle"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/testing"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -119,18 +118,7 @@ var _ = Describe("SplunkFirehoseNozzle", func() {
 		Ω(err).ShouldNot(HaveOccurred())
 	})
 
-	It("EventSource", func() {
-		client := &cfclient.Client{
-			Endpoint: cfclient.Endpoint{
-				DopplerEndpoint: "ws://localhost:9911",
-			},
-		}
-
-		f := noz.EventSource(client)
-		Expect(f).ToNot(BeNil())
-	})
-
-	It("Montoring Enabled", func() {
+	It("Monitoring Enabled", func() {
 		enableMonitoring := noz.Metric()
 		if _, ok := enableMonitoring.(*monitoring.Metrics); ok {
 			Expect(ok).To(Equal(true))
@@ -138,7 +126,7 @@ var _ = Describe("SplunkFirehoseNozzle", func() {
 
 	})
 
-	It("Montoring Disabled", func() {
+	It("Monitoring Disabled", func() {
 		config.StatusMonitorInterval = 0 * time.Second
 		disableMonitoring := noz.Metric()
 		_, ok := disableMonitoring.(*monitoring.Metrics)
@@ -166,7 +154,10 @@ var _ = Describe("SplunkFirehoseNozzle", func() {
 		started := make(chan struct{})
 		go func() {
 			started <- struct{}{}
-			cc.Start()
+			err := cc.Start()
+			if err != nil {
+				fmt.Printf("cc.Start() err: %s\n", err)
+			}
 		}()
 		<-started
 

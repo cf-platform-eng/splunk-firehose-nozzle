@@ -3,7 +3,7 @@ package nozzle_test
 import (
 	"time"
 
-	"code.cloudfoundry.org/lager"
+	"code.cloudfoundry.org/lager/v3"
 
 	. "github.com/cloudfoundry-community/splunk-firehose-nozzle/nozzle"
 	"github.com/cloudfoundry/sonde-go/events"

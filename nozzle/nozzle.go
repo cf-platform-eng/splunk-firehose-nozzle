@@ -3,7 +3,7 @@ package nozzle
 import (
 	"time"
 
-	"code.cloudfoundry.org/lager"
+	"code.cloudfoundry.org/lager/v3"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/eventrouter"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/eventsource"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/monitoring"

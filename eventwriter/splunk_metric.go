@@ -11,7 +11,7 @@ import (
 	"net/http"
 
 	"code.cloudfoundry.org/cfhttp"
-	"code.cloudfoundry.org/lager"
+	"code.cloudfoundry.org/lager/v3"
 )
 
 type splunkMetric struct {

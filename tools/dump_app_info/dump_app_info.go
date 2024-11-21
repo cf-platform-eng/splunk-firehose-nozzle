@@ -2,44 +2,51 @@ package main
 
 import (
 	"fmt"
+	"github.com/cloudfoundry-community/splunk-firehose-nozzle/splunknozzle"
+	"github.com/cloudfoundry/go-cfclient/v3/client"
+	"github.com/cloudfoundry/go-cfclient/v3/config"
 	"os"
 	"time"
 
-	cfclient "github.com/cloudfoundry-community/go-cfclient"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/cache"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 func main() {
 	skipSSL := kingpin.Flag("skip-ssl-validation", "Skip cert validation (for dev environments").
-		OverrideDefaultFromEnvar("SKIP_SSL_VALIDATION").Default("false").Bool()
+		Envar("SKIP_SSL_VALIDATION").Default("false").Bool()
 	apiEndpoint := kingpin.Flag("api-endpoint", "API endpoint address").
-		OverrideDefaultFromEnvar("API_ENDPOINT").Required().String()
+		Envar("API_ENDPOINT").Required().String()
 	user := kingpin.Flag("user", "Admin user.").
-		OverrideDefaultFromEnvar("API_USER").Required().String()
+		Envar("API_USER").Required().String()
 	password := kingpin.Flag("password", "Admin password.").
-		OverrideDefaultFromEnvar("API_PASSWORD").Required().String()
+		Envar("API_PASSWORD").Required().String()
 	boltdbPath := kingpin.Flag("boltdb-path", "Bolt Database path ").
-		Default("appinfo-bolt.db").OverrideDefaultFromEnvar("BOLTDB_PATH").String()
+		Default("appinfo-bolt.db").Envar("BOLTDB_PATH").String()
 	kingpin.Parse()
 
-	cfConfig := cfclient.Config{
-		ApiAddress:        *apiEndpoint,
-		Username:          *user,
-		Password:          *password,
-		SkipSslValidation: *skipSSL,
+	var skipSSLCF config.Option
+	if *skipSSL {
+		skipSSLCF = config.SkipTLSValidation()
 	}
-
-	cfClient, err := cfclient.NewClient(&cfConfig)
+	cfConfig, err := config.New(*apiEndpoint, config.ClientCredentials(*user, *password), skipSSLCF, config.UserAgent("splunk-firehose-nozzle"))
 	if err != nil {
-		fmt.Printf("failed to create PCF client, error=%+v\n", err)
+		fmt.Printf("failed to create CF config, error=%+v\n", err)
 		os.Exit(1)
 	}
+
+	cfClient, err := client.New(cfConfig)
+	if err != nil {
+		fmt.Printf("failed to create CF client, error=%+v\n", err)
+		os.Exit(1)
+	}
+
+	nozzleCfClient := splunknozzle.NozzleCfClient(*cfClient)
 
 	config := cache.BoltdbConfig{
 		Path: *boltdbPath,
 	}
-	bolt, err := cache.NewBoltdb(cfClient, &config)
+	bolt, err := cache.NewBoltdb(nozzleCfClient, &config)
 	if err != nil {
 		fmt.Printf("failed to create boltdb caching client, error=%+v\n", err)
 		os.Exit(1)

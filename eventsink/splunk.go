@@ -10,7 +10,7 @@ import (
 
 	"sync/atomic"
 
-	"code.cloudfoundry.org/lager"
+	"code.cloudfoundry.org/lager/v3"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/cache"
 	fevents "github.com/cloudfoundry-community/splunk-firehose-nozzle/events"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/eventwriter"

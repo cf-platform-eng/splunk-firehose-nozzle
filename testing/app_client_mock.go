@@ -3,15 +3,14 @@ package testing
 import (
 	"errors"
 	"fmt"
+	"github.com/cloudfoundry/go-cfclient/v3/resource"
 	"net/url"
 	"sync"
-
-	cfclient "github.com/cloudfoundry-community/go-cfclient"
 )
 
 type AppClientMock struct {
 	lock                    sync.RWMutex
-	apps                    map[string]cfclient.App
+	apps                    map[string]*resource.App
 	n                       int
 	listAppsCallCount       int
 	appByGUIDCallCount      int
@@ -27,7 +26,7 @@ func NewAppClientMock(n int) *AppClientMock {
 	}
 }
 
-func (m *AppClientMock) AppByGuid(guid string) (cfclient.App, error) {
+func (m *AppClientMock) AppByGuid(guid string) (*resource.App, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
@@ -40,24 +39,24 @@ func (m *AppClientMock) AppByGuid(guid string) (cfclient.App, error) {
 	return app, errors.New("No such app")
 }
 
-func (m *AppClientMock) ListApps() ([]cfclient.App, error) {
+func (m *AppClientMock) ListApps() ([]*resource.App, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
 	m.listAppsCallCount++
 
-	var apps []cfclient.App
+	var apps []*resource.App
 	for k := range m.apps {
 		apps = append(apps, m.apps[k])
 	}
 	return apps, nil
 }
 
-func (m *AppClientMock) ListAppsByQueryWithLimits(query url.Values, totalPages int) ([]cfclient.App, error) {
+func (m *AppClientMock) ListAppsByQueryWithLimits(query url.Values, totalPages int) ([]*resource.App, error) {
 	return m.ListApps()
 }
 
-func (m *AppClientMock) GetSpaceByGuid(spaceGUID string) (cfclient.Space, error) {
+func (m *AppClientMock) GetSpaceByGuid(spaceGUID string) (*resource.Space, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -66,14 +65,14 @@ func (m *AppClientMock) GetSpaceByGuid(spaceGUID string) (cfclient.Space, error)
 	var id int
 	fmt.Sscanf(spaceGUID, "cf_space_id_%d", &id)
 
-	return cfclient.Space{
-		Guid:             spaceGUID,
-		Name:             fmt.Sprintf("cf_space_name_%d", id),
-		OrganizationGuid: fmt.Sprintf("cf_org_id_%d", id),
+	return &resource.Space{
+		Resource:      resource.Resource{GUID: spaceGUID},
+		Name:          fmt.Sprintf("cf_space_name_%d", id),
+		Relationships: &resource.SpaceRelationships{Organization: &resource.ToOneRelationship{Data: &resource.Relationship{GUID: fmt.Sprintf("cf_org_id_%d", id)}}},
 	}, nil
 }
 
-func (m *AppClientMock) GetOrgByGuid(orgGUID string) (cfclient.Org, error) {
+func (m *AppClientMock) GetOrgByGuid(orgGUID string) (*resource.Organization, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -82,23 +81,23 @@ func (m *AppClientMock) GetOrgByGuid(orgGUID string) (cfclient.Org, error) {
 	var id int
 	fmt.Sscanf(orgGUID, "cf_org_id_%d", &id)
 
-	return cfclient.Org{
-		Guid: orgGUID,
-		Name: fmt.Sprintf("cf_org_name_%d", id),
-	}, nil
+	return &resource.Organization{
+		Name:     fmt.Sprintf("cf_org_name_%d", id),
+		Resource: resource.Resource{GUID: orgGUID}}, nil
 }
 
 func (m *AppClientMock) CreateApp(appID, spaceID string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	app := cfclient.App{
-		Guid:      appID,
-		Name:      appID,
-		SpaceGuid: spaceID,
+	app := resource.App{
+		Resource:      resource.Resource{GUID: appID},
+		Name:          appID,
+		Relationships: resource.SpaceRelationship{Space: resource.ToOneRelationship{Data: &resource.Relationship{GUID: spaceID}}},
+		Metadata:      &resource.Metadata{Labels: make(map[string]*string)},
 	}
 
-	m.apps[appID] = app
+	m.apps[appID] = &app
 }
 
 func (m *AppClientMock) DeleteApp(appID string) {
@@ -107,15 +106,16 @@ func (m *AppClientMock) DeleteApp(appID string) {
 	delete(m.apps, appID)
 }
 
-func getApps(n int) map[string]cfclient.App {
-	apps := make(map[string]cfclient.App, n)
+func getApps(n int) map[string]*resource.App {
+	apps := make(map[string]*resource.App, n)
 	for i := 0; i < n; i++ {
-		app := cfclient.App{
-			Guid:      fmt.Sprintf("cf_app_id_%d", i),
-			Name:      fmt.Sprintf("cf_app_name_%d", i),
-			SpaceGuid: fmt.Sprintf("cf_space_id_%d", i%50),
+		app := resource.App{
+			Resource:      resource.Resource{GUID: fmt.Sprintf("cf_app_id_%d", i)},
+			Name:          fmt.Sprintf("cf_app_name_%d", i),
+			Relationships: resource.SpaceRelationship{Space: resource.ToOneRelationship{Data: &resource.Relationship{GUID: fmt.Sprintf("cf_space_id_%d", i%50)}}},
+			Metadata:      &resource.Metadata{Labels: make(map[string]*string)},
 		}
-		apps[app.Guid] = app
+		apps[app.GUID] = &app
 	}
 	return apps
 }

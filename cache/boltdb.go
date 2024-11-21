@@ -3,13 +3,12 @@ package cache
 import (
 	"errors"
 	"fmt"
-	"net/url"
+	"github.com/cloudfoundry/go-cfclient/v3/resource"
 	"sync"
 	"time"
 
-	"code.cloudfoundry.org/lager"
+	"code.cloudfoundry.org/lager/v3"
 
-	cfclient "github.com/cloudfoundry-community/go-cfclient"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/monitoring"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/utils"
 	json "github.com/mailru/easyjson"
@@ -302,24 +301,14 @@ func (c *Boltdb) getAppFromDatabase(appGuid string) (*App, error) {
 func (c *Boltdb) getAllAppsFromRemote() (map[string]*App, error) {
 	c.config.Logger.Info("Retrieving apps from remote")
 
-	totalPages := 0
-	q := url.Values{}
-	q.Set("inline-relations-depth", "0")
-	if c.config.AppLimits > 0 {
-		// Latest N apps
-		q.Set("order-direction", "desc")
-		q.Set("results-per-page", "100")
-		totalPages = c.config.AppLimits/100 + 1
-	}
-
-	cfApps, err := c.appClient.ListAppsByQueryWithLimits(q, totalPages)
+	cfApps, err := c.appClient.ListApps()
 	if err != nil {
 		return nil, err
 	}
 
 	apps := make(map[string]*App, len(cfApps))
 	for i := range cfApps {
-		app := c.fromPCFApp(&cfApps[i])
+		app := c.fromPCFApp(cfApps[i])
 		apps[app.Guid] = app
 	}
 
@@ -413,13 +402,13 @@ func (c *Boltdb) fillDatabase(apps map[string]*App) {
 	}
 }
 
-func (c *Boltdb) fromPCFApp(app *cfclient.App) *App {
+func (c *Boltdb) fromPCFApp(app *resource.App) *App {
 	cachedApp := &App{
-		Name:       app.Name,
-		Guid:       app.Guid,
-		SpaceGuid:  app.SpaceGuid,
-		IgnoredApp: c.isOptOut(app.Environment),
-		CfAppEnv:   app.Environment,
+		Name:        app.Name,
+		Guid:        app.GUID,
+		SpaceGuid:   app.Relationships.Space.Data.GUID,
+		IgnoredApp:  c.isOptOut(app.Metadata.Labels),
+		CfAppLabels: app.Metadata.Labels,
 	}
 
 	c.fillOrgAndSpace(cachedApp)
@@ -442,7 +431,7 @@ func (c *Boltdb) fillOrgAndSpace(app *App) error {
 
 		space = Space{
 			Name:        cfspace.Name,
-			OrgGUID:     cfspace.OrganizationGuid,
+			OrgGUID:     cfspace.Relationships.Organization.Data.GUID,
 			LastUpdated: now,
 		}
 
@@ -484,14 +473,14 @@ func (c *Boltdb) getAppFromRemote(appGuid string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	app := c.fromPCFApp(&cfApp)
+	app := c.fromPCFApp(cfApp)
 	c.fillDatabase(map[string]*App{app.Guid: app})
 
 	return app, nil
 }
 
-func (c *Boltdb) isOptOut(envVar map[string]interface{}) bool {
-	if val, ok := envVar["F2S_DISABLE_LOGGING"]; ok && val == "true" {
+func (c *Boltdb) isOptOut(appLabels map[string]*string) bool {
+	if val, ok := appLabels["F2S_DISABLE_LOGGING"]; ok && *val == "true" {
 		return true
 	}
 	return false

@@ -1,12 +1,14 @@
 package splunknozzle
 
 import (
+	"context"
+	"fmt"
+	"github.com/cloudfoundry/go-cfclient/v3/resource"
 	"os"
 	"strings"
 	"time"
 
-	"code.cloudfoundry.org/lager"
-	cfclient "github.com/cloudfoundry-community/go-cfclient"
+	"code.cloudfoundry.org/lager/v3"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/cache"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/eventrouter"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/events"
@@ -15,6 +17,8 @@ import (
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/eventwriter"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/monitoring"
 	"github.com/cloudfoundry-community/splunk-firehose-nozzle/utils"
+	"github.com/cloudfoundry/go-cfclient/v3/client"
+	"github.com/cloudfoundry/go-cfclient/v3/config"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 
@@ -25,6 +29,38 @@ import (
 type SplunkFirehoseNozzle struct {
 	config *Config
 	logger lager.Logger
+}
+
+type NozzleCfClient client.Client // NozzleCfClient is a wrapper around cfclient.Client
+
+var cfContext = context.Background()
+
+func (ncc NozzleCfClient) GetToken() (string, error) {
+	if tokenSource, err := ncc.Config.CreateOAuth2TokenSource(context.Background()); err != nil {
+		return "", err
+	} else {
+		if token, err := tokenSource.Token(); err != nil {
+			return "", err
+		} else {
+			return token.AccessToken, nil
+		}
+	}
+}
+
+func (ncc NozzleCfClient) AppByGuid(appGUID string) (*resource.App, error) {
+	return ncc.Applications.Get(cfContext, appGUID)
+}
+
+func (ncc NozzleCfClient) ListApps() ([]*resource.App, error) {
+	return ncc.Applications.ListAll(cfContext, &client.AppListOptions{ListOptions: &client.ListOptions{PerPage: 500}})
+}
+
+func (ncc NozzleCfClient) GetSpaceByGuid(spaceGUID string) (*resource.Space, error) {
+	return ncc.Spaces.Get(cfContext, spaceGUID)
+}
+
+func (ncc NozzleCfClient) GetOrgByGuid(orgGUID string) (*resource.Organization, error) {
+	return ncc.Organizations.Get(cfContext, orgGUID)
 }
 
 // create new function of type *SplunkFirehoseNozzle
@@ -51,17 +87,21 @@ func (s *SplunkFirehoseNozzle) EventRouter(cache cache.Cache, eventSink eventsin
 }
 
 // CFClient creates a client object which can talk to Cloud Foundry
-func (s *SplunkFirehoseNozzle) PCFClient() (*cfclient.Client, error) {
-	cfConfig := &cfclient.Config{
-		ApiAddress:        s.config.ApiEndpoint,
-		Username:          s.config.User,
-		Password:          s.config.Password,
-		SkipSslValidation: s.config.SkipSSLCF,
-		ClientID:          s.config.ClientID,
-		ClientSecret:      s.config.ClientSecret,
+func (s *SplunkFirehoseNozzle) PCFClient() (*NozzleCfClient, error) {
+	var skipSSL config.Option
+	if s.config.SkipSSLCF {
+		skipSSL = config.SkipTLSValidation()
 	}
-
-	return cfclient.NewClient(cfConfig)
+	if cfConfig, err := config.New(s.config.ApiEndpoint, config.ClientCredentials(s.config.ClientID, s.config.ClientSecret), skipSSL, config.UserAgent(fmt.Sprintf("splunk-firehose-nozzle/%s", s.config.Version))); err != nil {
+		return nil, err
+	} else {
+		if cfClient, err := client.New(cfConfig); err != nil {
+			return nil, err
+		} else {
+			nozzleCfClient := NozzleCfClient(*cfClient)
+			return &nozzleCfClient, nil
+		}
+	}
 }
 
 // AppCache creates in-memory cache or boltDB cache
@@ -172,15 +212,19 @@ func (s *SplunkFirehoseNozzle) Metric() monitoring.Monitor {
 }
 
 // EventSource creates eventsource.Source object which can read events from
-func (s *SplunkFirehoseNozzle) EventSource(pcfClient *cfclient.Client) *eventsource.Firehose {
-	config := &eventsource.FirehoseConfig{
+func (s *SplunkFirehoseNozzle) EventSource(pcfClient *NozzleCfClient) *eventsource.Firehose {
+	root, err := pcfClient.Root.Get(context.Background())
+	if err != nil {
+		fmt.Printf("Root: %v, err: %s\n", root, err)
+	}
+	firehoseConfig := &eventsource.FirehoseConfig{
 		KeepAlive:      s.config.KeepAlive,
 		SkipSSL:        s.config.SkipSSLCF,
-		Endpoint:       pcfClient.Endpoint.DopplerEndpoint,
+		Endpoint:       root.Links.Logging.Href,
 		SubscriptionID: s.config.SubscriptionID,
 	}
 
-	return eventsource.NewFirehose(pcfClient, config)
+	return eventsource.NewFirehose(*pcfClient, firehoseConfig)
 }
 
 // Nozzle creates a Nozzle object which glues the event source and event router

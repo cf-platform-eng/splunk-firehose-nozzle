@@ -1,7 +1,9 @@
 package main
 
 import (
+	"code.cloudfoundry.org/lager/v3"
 	"flag"
+	"github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,8 +21,9 @@ var (
 
 func main() {
 	lagerflags.AddFlags(flag.CommandLine)
-
-	logger, _ := lagerflags.New("splunk-nozzle-logger")
+	logger := lager.NewLogger("splunk-nozzle-logger")
+	logger.RegisterSink(lager.NewWriterSink(os.Stdout, lager.INFO))
+	logrus.SetFormatter(&logrus.TextFormatter{DisableTimestamp: true}) // disable the `time` field, it is already included in the cf logging
 	logger.Info("Running splunk-firehose-nozzle")
 
 	shutdownChan := make(chan os.Signal, 2)

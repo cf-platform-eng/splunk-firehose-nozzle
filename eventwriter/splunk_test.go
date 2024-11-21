@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"code.cloudfoundry.org/lager"
+	"code.cloudfoundry.org/lager/v3"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
