@@ -3,3 +3,7 @@ server: https://app.fossa.com
 project:
   id: "splunk-firehose-nozzle"
   team: "TA-Automation"
+
+paths:
+  exclude:
+    - testing
